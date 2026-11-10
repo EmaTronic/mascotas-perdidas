@@ -1,7 +1,7 @@
-:root{--fondo:#fffaf6;--texto:#2b211c;--suave:#6b5d55;--naranja:#c85a0a;--rojo:#c62828;--verde:#2e7d5b;--tarjeta:#ffffff;--borde:#f0e2d8}
+:root{--fondo:#F5F7FA;--texto:#1F2937;--suave:#4B5563;--naranja:#1F2937;--rojo:#c62828;--verde:#2e7d5b;--tarjeta:#ffffff;--borde:#E3E7ED}
 @media (prefers-color-scheme:dark){:root{--fondo:#1d1714;--texto:#f3ebe6;--suave:#b8a99f;--naranja:#ffb68a;--rojo:#ff8a80;--verde:#8fd5b0;--tarjeta:#2a221e;--borde:#3d322c}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--fondo);color:var(--texto);font:17px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{margin:0;background:var(--fondo);color:var(--texto);font:17px/1.6 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:760px;margin:0 auto;padding:32px 18px 64px}
 header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
 .logo{width:44px;height:44px;border-radius:12px;background:var(--naranja);display:grid;place-items:center;color:#fff;font-size:24px}

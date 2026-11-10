@@ -2,37 +2,708 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Mascotas Perdidas</title>
-<meta name="description" content="App gratuita para encontrar perros y gatos perdidos en un mapa.">
-<link rel="stylesheet" href="estilos.css">
+<meta name="description" content="Mapa gratuito para encontrar perros y gatos perdidos en Argentina.">
+<link rel="icon" href="icono.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --pizarra:#1F2937;--pizarra-suave:#4B5563;--fondo:#F5F7FA;--superficie:#EEF1F4;--borde:#E3E7ED;--blanco:#FFFFFF;
+  --manteca:#FFE58F;
+  --calle:#F2C230;--calle-fondo:#FFE58F;--calle-texto:#4A3A00;
+  --busca:#E5534B;--busca-fondo:#FFB4B0;--busca-texto:#6B1512;
+  --casa:#2E9E6B;--casa-fondo:#BDEBD3;--casa-texto:#0E4A2F;
+  --oculto-fondo:#E3E7ED;--oculto-texto:#3D4653;--error:#C0362F;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--fondo);color:var(--pizarra);font:16px/1.45 "Plus Jakarta Sans",system-ui,sans-serif}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+#mapa{position:fixed;inset:0;z-index:1;background:#EEF1F4}
+.leaflet-control-attribution{font-size:11px}
+
+/* Barra superior */
+.barra{position:fixed;top:12px;left:12px;right:12px;z-index:500;display:flex;gap:12px;align-items:center;max-width:720px;margin:0 auto}
+.filtros{flex:1;min-width:0;display:flex;gap:6px;padding:6px;background:rgba(255,255,255,.96);border:1px solid var(--borde);border-radius:18px;box-shadow:0 2px 10px rgba(31,41,55,.08);overflow-x:auto;scrollbar-width:none}
+.filtros::-webkit-scrollbar{display:none}
+.filtro{height:40px;padding:0 12px;border:2px solid transparent;border-radius:12px;font-weight:700;font-size:14px;white-space:nowrap}
+.filtro.todas{background:var(--superficie)}
+.filtro.todas.on{background:var(--pizarra);color:#fff}
+.filtro.calle{background:var(--calle-fondo);color:var(--calle-texto)}
+.filtro.busca{background:var(--busca-fondo);color:var(--busca-texto)}
+.filtro.calle.on,.filtro.busca.on{border-color:var(--pizarra)}
+.cuadrado{width:48px;height:48px;flex-shrink:0;border-radius:14px;border:1px solid var(--borde);background:#fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(31,41,55,.10)}
+.cuadrado.oscuro{width:54px;height:54px;border-radius:18px;border:none;background:var(--pizarra);color:#fff;box-shadow:0 6px 16px rgba(31,41,55,.30)}
+.cuadrado svg{width:22px;height:22px}
+
+/* Menú */
+.menu{position:fixed;top:76px;right:12px;z-index:700;min-width:250px;background:#fff;border:1px solid var(--borde);border-radius:16px;box-shadow:0 12px 32px rgba(31,41,55,.18);padding:6px;display:none}
+.menu.abierto{display:block}
+.menu button,.menu a{display:block;width:100%;text-align:left;background:none;border:none;padding:12px 14px;border-radius:10px;font-weight:600;color:var(--pizarra);text-decoration:none}
+.menu button:hover,.menu a:hover{background:var(--superficie)}
+.menu hr{border:none;border-top:1px solid var(--borde);margin:6px 4px}
+.menu .peligro{color:var(--error)}
+.menu .cuenta{font-size:13px;color:var(--pizarra-suave);padding:4px 14px 8px}
+.menu .cafe{background:var(--manteca)}
+.menu .cafe:hover{background:#FFD95A}
+
+/* Botones flotantes */
+.flotantes{position:fixed;right:16px;bottom:calc(24px + env(safe-area-inset-bottom));z-index:500;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.publicar{height:56px;padding:0 22px;border:none;border-radius:16px;background:var(--pizarra);color:#fff;font-weight:700;display:flex;align-items:center;gap:8px;box-shadow:0 8px 20px rgba(31,41,55,.30)}
+.publicar svg{width:20px;height:20px}
+
+/* Marcadores */
+.mk{width:84px;height:84px;border-radius:50%;border:5px solid var(--calle);background:#fff;box-shadow:inset 0 0 0 3px #fff,0 8px 18px rgba(31,41,55,.25);overflow:hidden;cursor:pointer}
+.mk.busca{border-color:var(--busca)}
+.mk img{width:100%;height:100%;object-fit:cover;border-radius:50%;padding:3px;display:block}
+.yo{width:22px;height:22px;border-radius:50%;background:#4C8DF6;border:4px solid #fff;box-shadow:0 0 0 10px rgba(76,141,246,.2)}
+
+/* Ventanas */
+.fondo-modal{position:fixed;inset:0;z-index:1000;background:rgba(17,24,39,.45);display:none;align-items:flex-end;justify-content:center}
+.fondo-modal.abierto{display:flex}
+.modal{background:#fff;width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:22px 22px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+@media(min-width:700px){.fondo-modal{align-items:center}.modal{border-radius:22px}}
+.modal h2{margin:4px 0 2px;font-size:22px}
+.cabecera{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.cerrar{width:40px;height:40px;border-radius:12px;border:none;background:var(--superficie);display:grid;place-items:center;flex-shrink:0}
+.sub{color:var(--pizarra-suave);margin:0}
+.etiqueta{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.04em;padding:3px 8px;border-radius:8px;text-transform:uppercase}
+.et-calle{background:var(--calle-fondo);color:var(--calle-texto)}
+.et-busca{background:var(--busca-fondo);color:var(--busca-texto)}
+.et-casa{background:var(--casa-fondo);color:var(--casa-texto)}
+.et-oculto{background:var(--oculto-fondo);color:var(--oculto-texto)}
+.foto-grande{width:100%;height:280px;object-fit:cover;border-radius:14px;background:var(--superficie);display:block}
+.miniaturas{display:flex;gap:8px;margin-top:8px}
+.miniaturas img{width:56px;height:56px;object-fit:cover;border-radius:8px;border:3px solid transparent;cursor:pointer}
+.miniaturas img.on{border-color:var(--pizarra)}
+.dato{margin:2px 0}
+.boton{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;border-radius:14px;border:none;background:var(--pizarra);color:#fff;font-weight:700;margin-top:8px;text-decoration:none;padding:0 16px}
+.boton.claro{background:#fff;color:var(--pizarra);border:1px solid #C9D0DA}
+.boton.verde{background:var(--casa-fondo);color:var(--casa-texto)}
+.boton.amarillo{background:var(--calle-fondo);color:var(--calle-texto)}
+.boton.rojo{background:var(--busca-fondo);color:var(--busca-texto)}
+.boton:disabled{opacity:.45;cursor:default}
+.enlace{background:none;border:none;padding:10px 4px;font-weight:700}
+.enlace.peligro{color:var(--error)}
+.pie-modal{display:flex;justify-content:space-between;margin-top:8px}
+
+/* Formulario */
+label.titulo{display:block;font-weight:700;font-size:14px;margin:16px 0 6px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{height:40px;padding:0 14px;border-radius:12px;border:1px solid #C9D0DA;background:#fff;font-weight:600}
+.chip.on{background:var(--manteca);border-color:var(--manteca);color:#4A3A00}
+input[type=text],input[type=tel],input[type=search],textarea{width:100%;padding:12px 14px;border:1px solid #C9D0DA;border-radius:12px;background:#fff}
+textarea{min-height:84px;resize:vertical}
+.ayuda{font-size:13px;color:var(--pizarra-suave);margin:4px 2px 0}
+.fotos{display:flex;gap:8px;flex-wrap:wrap}
+.foto-prev{position:relative;width:96px;height:96px}
+.foto-prev img{width:100%;height:100%;object-fit:cover;border-radius:12px}
+.foto-prev button{position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;font-weight:700}
+.agregar-foto{width:96px;height:96px;border-radius:12px;border:2px dashed #C9D0DA;background:var(--superficie);display:grid;place-items:center;font-weight:700;color:var(--pizarra-suave);text-align:center;font-size:13px}
+.error{color:var(--error);font-weight:600;margin-top:10px}
+#mapaPunto{height:340px;border-radius:14px;margin-top:8px;position:relative;z-index:1}
+.contenedor-punto{position:relative}
+.alfiler{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);z-index:2;pointer-events:none;width:44px;height:44px}
+
+/* Listas */
+.fila{display:flex;gap:12px;align-items:center;padding:10px;border:1px solid var(--borde);border-radius:14px;margin-top:10px;cursor:pointer;background:#fff;width:100%;text-align:left}
+.fila img{width:72px;height:72px;object-fit:cover;border-radius:10px;flex-shrink:0;background:var(--superficie)}
+.fila strong{display:block;margin-top:4px}
+.contador{text-align:center;padding:16px;border-radius:16px;background:var(--casa-fondo);color:var(--casa-texto);margin-top:8px}
+.contador b{display:block;font-size:44px;line-height:1.1}
+.radio{display:flex;gap:10px;align-items:center;padding:8px 2px}
+
+/* Aviso */
+.aviso{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);z-index:2000;background:var(--pizarra);color:#fff;padding:12px 18px;border-radius:12px;box-shadow:0 8px 20px rgba(0,0,0,.25);display:none;max-width:90vw;text-align:center}
+.aviso.visible{display:block}
+.oculto-visual{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
 </head>
 <body>
-<main>
-  <header><div class="logo">🐾</div><strong>Mascotas Perdidas</strong></header>
-  <nav><a href="index.html">Inicio</a><a href="privacidad.html">Política de privacidad</a><a href="eliminar-cuenta.html">Eliminar cuenta</a></nav>
 
-  <h1>Ayudá a que vuelvan a casa</h1>
-  <p class="sub">Una app gratuita para Android que muestra en un mapa los perros y gatos perdidos, y los que alguien vio solos en la calle.</p>
+<div id="mapa" aria-label="Mapa de mascotas"></div>
 
-  <div class="tarjetas">
-    <div class="tarjeta"><span class="etiqueta calle">EN LA CALLE</span><p>¿Viste un perro o un gato suelto? Sacale una foto y queda marcado en el mapa donde lo viste.</p></div>
-    <div class="tarjeta"><span class="etiqueta busca">SE BUSCA</span><p>¿Se perdió tu mascota? Publicá sus fotos, sus datos y la zona donde la viste por última vez.</p></div>
-    <div class="tarjeta"><span class="etiqueta casa">VOLVIÓ A CASA</span><p>Cuando aparece, se marca como recuperada y se suma a los finales felices.</p></div>
+<!-- Barra superior -->
+<div class="barra">
+  <div class="filtros" role="group" aria-label="Filtros">
+    <button class="filtro todas on" data-filtro="">Todas</button>
+    <button class="filtro calle" data-filtro="calle">En la calle</button>
+    <button class="filtro busca" data-filtro="buscada">Se busca</button>
   </div>
+  <button class="cuadrado oscuro" id="botonMenu" aria-label="Menú" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h16"/></svg>
+  </button>
+</div>
 
-  <h2>Cómo funciona</h2>
-  <ul>
-    <li>Ver el mapa y buscar por localidad es libre, sin registrarse.</li>
-    <li>Para publicar se inicia sesión con una cuenta de Google.</li>
-    <li>El contacto es directo por WhatsApp, con el número que cada persona elige mostrar.</li>
-    <li>Las publicaciones se dejan de mostrar solas: a los 30 días las de "En la calle" y a los 90 días las de "Se busca".</li>
-  </ul>
+<nav class="menu" id="menu" aria-label="Menú">
+  <button data-accion="buscar">Buscar por localidad</button>
+  <button data-accion="mias">Mis publicaciones</button>
+  <button data-accion="encasa">Volvieron a casa</button>
+  <hr>
+  <a href="privacidad.html">Privacidad y ayuda</a>
+  <a class="cafe" href="https://cafecito.app/mascotasperdidasar" target="_blank" rel="noopener">☕ Invitame un cafecito</a>
+  <hr>
+  <div id="menuSesion"></div>
+</nav>
 
-  <h2>Contacto</h2>
-  <p>Consultas, sugerencias o problemas: <a href="mailto:emanuelrodriguezcorchea@gmail.com">emanuelrodriguezcorchea@gmail.com</a></p>
+<!-- Botones flotantes -->
+<div class="flotantes">
+  <button class="cuadrado" id="botonActualizar" aria-label="Actualizar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+  </button>
+  <button class="cuadrado" id="botonUbicacion" aria-label="Mi ubicación">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+  </button>
+  <button class="publicar" id="botonPublicar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#FFE58F" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    Publicar
+  </button>
+</div>
 
-  <footer>Mascotas Perdidas · Argentina</footer>
-</main>
+<!-- Ventana genérica -->
+<div class="fondo-modal" id="fondoModal">
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+</div>
+
+<div class="aviso" id="aviso" role="status"></div>
+<input type="file" id="elegirFoto" accept="image/*" class="oculto-visual">
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+// ===================== Configuración =====================
+const SUPA_URL = "https://dbkvnxpgcoxocsvlmsij.supabase.co";
+const SUPA_KEY = "sb_publishable_vu0XnZRXf7jfEWWCTF_rxQ_EEcfQo5I";
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+const FOTOS_OK = SUPA_URL + "/storage/v1/object/public/fotos/";
+
+const MOTIVOS = [
+  ["ofensivo", "Contenido ofensivo o inapropiado"],
+  ["falso", "Publicación falsa o spam"],
+  ["venta", "Venta o comercio de animales"],
+  ["datos", "Expone datos personales de alguien"],
+  ["otro", "Otro motivo"]
+];
+
+// ===================== Utilidades =====================
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fotoSegura = (u) => (typeof u === "string" && u.startsWith(FOTOS_OK)) ? u : "";
+const normalizar = (t) => t.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().trim();
+const mayus = (t) => t ? t[0].toUpperCase() + t.slice(1) : t;
+
+function avisar(texto) {
+  const a = $("#aviso");
+  a.textContent = texto;
+  a.classList.add("visible");
+  clearTimeout(avisar.t);
+  avisar.t = setTimeout(() => a.classList.remove("visible"), 3500);
+}
+
+function haceCuanto(iso) {
+  if (!iso) return "";
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return "recién";
+  if (min < 60) return `hace ${min} min`;
+  if (min < 1440) return `hace ${Math.floor(min / 60)} h`;
+  if (min < 2880) return "ayer";
+  return `hace ${Math.floor(min / 1440)} días`;
+}
+
+const especie = (r) => r.especie === "gato" ? "Gato" : "Perro";
+function etiqueta(r) {
+  if (r.estado === "oculto") return ["Oculta por denuncias", "et-oculto"];
+  if (r.estado === "en_casa") return ["Volvió a casa", "et-casa"];
+  if (r.tipo === "buscada") return ["Se busca", "et-busca"];
+  return ["En la calle", "et-calle"];
+}
+function titulo(r) {
+  if (r.estado === "en_casa") return r.nombre ? `¡${r.nombre} volvió a casa!` : `¡${especie(r)} de vuelta en casa!`;
+  if (r.tipo === "buscada") return r.nombre ? `Se busca: ${r.nombre}` : `Se busca ${especie(r).toLowerCase()}`;
+  return `${especie(r)} en la calle`;
+}
+function subtitulo(r) {
+  const cuando = haceCuanto(r.estado === "en_casa" ? (r.recuperado_en || r.creado_en) : r.creado_en);
+  const verbo = r.estado === "en_casa" ? "Volvió" : r.tipo === "buscada" ? "Se perdió" : "Visto";
+  const donde = r.localidad ? ` en ${r.localidad}` : "";
+  return `${verbo} ${cuando}${donde}`;
+}
+function numeroWhatsApp(t) {
+  const d = t.replace(/\D/g, "");
+  if (d.startsWith("549")) return d;
+  if (d.startsWith("54")) return "549" + d.slice(2);
+  return "549" + d.replace(/^0/, "");
+}
+const fotosDe = (r) => [r.foto_url, ...(r.fotos_extra || [])].map(fotoSegura).filter(Boolean);
+
+// ===================== Sesión =====================
+let usuario = null;
+sb.auth.getSession().then(({ data }) => { usuario = data.session?.user ?? null; pintarSesion(); });
+sb.auth.onAuthStateChange((_e, sesion) => { usuario = sesion?.user ?? null; pintarSesion(); });
+
+function pintarSesion() {
+  const m = $("#menuSesion");
+  if (!usuario) {
+    m.innerHTML = `<button data-accion="entrar">Iniciar sesión con Google</button>`;
+  } else {
+    m.innerHTML = `<div class="cuenta">Sesión: ${esc(usuario.email || "")}</div>
+      <button data-accion="salir">Cerrar sesión</button>
+      <button class="peligro" data-accion="eliminarCuenta">Eliminar mi cuenta</button>`;
+  }
+}
+
+async function entrar() {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.origin + window.location.pathname }
+  });
+  if (error) avisar("No se pudo iniciar sesión: " + error.message);
+}
+
+// ===================== Mapa =====================
+const mapa = L.map("mapa", { zoomControl: false }).setView([-34.6037, -58.3816], 12);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+}).addTo(mapa);
+
+let reportes = [];
+let filtro = "";
+const capa = L.layerGroup().addTo(mapa);
+let marcaYo = null;
+let miPunto = null;
+
+function dibujar() {
+  capa.clearLayers();
+  for (const r of reportes) {
+    if (filtro && r.tipo !== filtro) continue;
+    const foto = fotoSegura(r.foto_url);
+    const icono = L.divIcon({
+      className: "",
+      html: `<div class="mk ${r.tipo === "buscada" ? "busca" : ""}">${foto ? `<img src="${esc(foto)}" alt="" loading="lazy">` : ""}</div>`,
+      iconSize: [84, 84],
+      iconAnchor: [42, 42]
+    });
+    L.marker([r.lat, r.lng], { icon: icono, keyboard: true, title: titulo(r) })
+      .on("click", () => abrirDetalle(r))
+      .addTo(capa);
+  }
+}
+
+async function cargar() {
+  const { data, error } = await sb.from("reportes").select("*")
+    .eq("estado", "activo").order("creado_en", { ascending: false }).limit(500);
+  if (error) { avisar("No se pudieron cargar las publicaciones"); return; }
+  reportes = data;
+  dibujar();
+}
+
+function ubicarme(centrar = true) {
+  if (!navigator.geolocation) { avisar("Tu navegador no permite ubicación"); return; }
+  navigator.geolocation.getCurrentPosition((p) => {
+    miPunto = [p.coords.latitude, p.coords.longitude];
+    if (marcaYo) marcaYo.remove();
+    marcaYo = L.marker(miPunto, { icon: L.divIcon({ className: "", html: '<div class="yo"></div>', iconSize: [30, 30], iconAnchor: [15, 15] }), interactive: false }).addTo(mapa);
+    if (centrar) mapa.setView(miPunto, 16);
+  }, () => avisar("No pudimos obtener tu ubicación. Revisá el permiso del navegador."), { enableHighAccuracy: true, timeout: 10000 });
+}
+
+// ===================== Ventanas =====================
+function abrirModal(html) {
+  $("#modal").innerHTML = html;
+  $("#fondoModal").classList.add("abierto");
+}
+function cerrarModal() {
+  $("#fondoModal").classList.remove("abierto");
+  $("#modal").innerHTML = "";
+  if (mapaPunto) { mapaPunto.remove(); mapaPunto = null; }
+}
+$("#fondoModal").addEventListener("click", (e) => { if (e.target.id === "fondoModal") cerrarModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarModal(); });
+const botonCerrar = `<button class="cerrar" data-cerrar aria-label="Cerrar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+$("#modal").addEventListener("click", (e) => { if (e.target.closest("[data-cerrar]")) cerrarModal(); });
+
+// ===================== Ficha =====================
+function abrirDetalle(r, desdeLista = false) {
+  const fotos = fotosDe(r);
+  const [txt, clase] = etiqueta(r);
+  const esMio = usuario && r.usuario_id === usuario.id;
+  const activo = r.estado === "activo";
+  const wa = r.contacto && activo
+    ? `<a class="boton" target="_blank" rel="noopener" href="https://wa.me/${numeroWhatsApp(r.contacto)}?text=${encodeURIComponent("Hola, te escribo por la publicación de Mascotas Perdidas: " + titulo(r))}">Escribir por WhatsApp</a>` : "";
+  abrirModal(`
+    <div class="cabecera"><span class="etiqueta ${clase}">${esc(txt)}</span>${botonCerrar}</div>
+    ${fotos.length ? `<img class="foto-grande" id="fotoGrande" src="${esc(fotos[0])}" alt="Foto de la mascota">` : ""}
+    ${fotos.length > 1 ? `<div class="miniaturas">${fotos.map((f, i) => `<img src="${esc(f)}" data-foto="${i}" class="${i === 0 ? "on" : ""}" alt="Foto ${i + 1}">`).join("")}</div>` : ""}
+    <h2>${esc(titulo(r))}</h2>
+    <p class="sub">${esc(subtitulo(r))}</p>
+    <div style="margin-top:10px">
+      <p class="dato"><b>Especie:</b> ${esc(especie(r))}</p>
+      ${r.tamano ? `<p class="dato"><b>Tamaño:</b> ${esc(mayus(r.tamano))}</p>` : ""}
+      ${r.color ? `<p class="dato"><b>Color:</b> ${esc(r.color)}</p>` : ""}
+      ${r.descripcion ? `<p class="dato"><b>${r.tipo === "buscada" ? "Señas" : "Detalles"}:</b> ${esc(r.descripcion)}</p>` : ""}
+      ${r.tipo === "buscada" && activo ? `<p class="ayuda">La ubicación en el mapa es aproximada.</p>` : ""}
+      ${r.estado === "oculto" ? `<p class="error">Esta publicación fue ocultada porque recibió varias denuncias.</p>` : ""}
+    </div>
+    ${wa}
+    ${activo && desdeLista ? `<button class="boton claro" data-ver-mapa>Ver en el mapa</button>` : ""}
+    ${activo ? `<a class="boton claro" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}">Cómo llegar</a>` : ""}
+    ${esMio ? `<h3 style="margin:18px 0 0;font-size:15px">Tu publicación</h3>
+      ${activo ? `<button class="boton verde" data-en-casa>¡Volvió a casa!</button>` : ""}
+      <button class="boton claro" data-borrar style="color:var(--error)">Borrar publicación</button>` : ""}
+    <div class="pie-modal">
+      ${!esMio && activo ? `<button class="enlace peligro" data-denunciar>Denunciar</button>` : "<span></span>"}
+      <button class="enlace" data-cerrar>Cerrar</button>
+    </div>`);
+
+  const m = $("#modal");
+  m.querySelectorAll("[data-foto]").forEach(img => img.addEventListener("click", () => {
+    $("#fotoGrande").src = fotos[+img.dataset.foto];
+    m.querySelectorAll("[data-foto]").forEach(x => x.classList.toggle("on", x === img));
+  }));
+  m.querySelector("[data-ver-mapa]")?.addEventListener("click", () => {
+    cerrarModal(); ponerFiltro(""); mapa.setView([r.lat, r.lng], 17);
+  });
+  m.querySelector("[data-en-casa]")?.addEventListener("click", async () => {
+    const { error } = await sb.from("reportes").update({ estado: "en_casa" }).eq("id", r.id);
+    if (error) return avisar("Error: " + error.message);
+    avisar("¡Qué alegría! Gracias por avisar.");
+    cerrarModal(); cargar();
+  });
+  m.querySelector("[data-borrar]")?.addEventListener("click", async () => {
+    if (!confirm("¿Borrar la publicación? Se elimina con sus fotos y no se puede deshacer.")) return;
+    try { await borrarReporte(r); avisar("Publicación borrada"); cerrarModal(); cargar(); }
+    catch (e) { avisar("Error: " + e.message); }
+  });
+  m.querySelector("[data-denunciar]")?.addEventListener("click", () => abrirDenuncia(r));
+}
+
+async function borrarReporte(r) {
+  const { error } = await sb.from("reportes").delete().eq("id", r.id);
+  if (error) throw error;
+  const rutas = fotosDe(r).map(u => u.slice(FOTOS_OK.length));
+  if (rutas.length) await sb.storage.from("fotos").remove(rutas);
+}
+
+// ===================== Denuncias =====================
+function abrirDenuncia(r) {
+  if (!usuario) { avisar("Para denunciar, iniciá sesión con Google"); setTimeout(entrar, 800); return; }
+  abrirModal(`
+    <div class="cabecera"><h2>Denunciar publicación</h2>${botonCerrar}</div>
+    <p class="sub">¿Por qué no debería estar? El autor no ve quién la denunció.</p>
+    <div style="margin-top:8px">${MOTIVOS.map(([v, t]) => `<label class="radio"><input type="radio" name="motivo" value="${v}"> ${t}</label>`).join("")}</div>
+    <label class="titulo" for="detalleDenuncia">Comentario (opcional)</label>
+    <textarea id="detalleDenuncia" maxlength="300"></textarea>
+    <button class="boton" id="enviarDenuncia" disabled>Enviar</button>`);
+  const m = $("#modal");
+  m.querySelectorAll("input[name=motivo]").forEach(x => x.addEventListener("change", () => $("#enviarDenuncia").disabled = false));
+  $("#enviarDenuncia").addEventListener("click", async () => {
+    const motivo = m.querySelector("input[name=motivo]:checked")?.value;
+    const detalle = $("#detalleDenuncia").value.trim() || null;
+    const { error } = await sb.from("denuncias").insert({ reporte_id: r.id, motivo, detalle });
+    if (error && error.code === "23505") avisar("Ya habías denunciado esta publicación.");
+    else if (error) avisar("Error: " + error.message);
+    else avisar("Gracias. Vamos a revisar la publicación.");
+    cerrarModal();
+  });
+}
+
+// ===================== Listas =====================
+function fila(r) {
+  const [txt, clase] = etiqueta(r);
+  const foto = fotoSegura(r.foto_url);
+  return `<button class="fila" data-id="${esc(r.id)}">
+    ${foto ? `<img src="${esc(foto)}" alt="" loading="lazy">` : `<img alt="">`}
+    <span><span class="etiqueta ${clase}">${esc(txt)}</span><strong>${esc(titulo(r))}</strong><span class="sub" style="font-size:14px">${esc(subtitulo(r))}</span></span>
+  </button>`;
+}
+function conectarFilas(lista) {
+  $("#modal").querySelectorAll(".fila").forEach(b => b.addEventListener("click", () => {
+    const r = lista.find(x => x.id === b.dataset.id);
+    if (r) abrirDetalle(r, true);
+  }));
+}
+
+function abrirBuscar() {
+  abrirModal(`
+    <div class="cabecera"><h2>Buscar por localidad</h2>${botonCerrar}</div>
+    <form id="formBuscar" style="display:flex;gap:8px">
+      <input type="search" id="textoBuscar" placeholder="Ej: Quilmes, Rosario" aria-label="Localidad" maxlength="60">
+      <button class="boton" style="width:auto;margin:0">Buscar</button>
+    </form>
+    <div class="chips" style="margin-top:10px" id="filtroLista">
+      <button class="chip on" data-f="">Todas</button><button class="chip" data-f="calle">En la calle</button><button class="chip" data-f="buscada">Se busca</button>
+    </div>
+    <div id="resultados"><p class="sub" style="margin-top:16px">Escribí una localidad y tocá Buscar.</p></div>`);
+  let lista = [], f = "";
+  const pintar = () => {
+    const vis = f ? lista.filter(r => r.tipo === f) : lista;
+    $("#resultados").innerHTML = vis.length ? vis.map(fila).join("") : `<p class="sub" style="margin-top:16px">No hay publicaciones para esa búsqueda.</p>`;
+    conectarFilas(vis);
+  };
+  $("#filtroLista").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-f]"); if (!b) return;
+    f = b.dataset.f;
+    $("#filtroLista").querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === b));
+    pintar();
+  });
+  $("#formBuscar").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const t = normalizar($("#textoBuscar").value).replace(/[^\p{L}\p{N} ]/gu, "").trim();
+    if (!t) return;
+    $("#resultados").innerHTML = `<p class="sub" style="margin-top:16px">Buscando…</p>`;
+    const { data, error } = await sb.from("reportes").select("*").eq("estado", "activo")
+      .ilike("localidad_busqueda", `%${t}%`).order("creado_en", { ascending: false }).limit(200);
+    if (error) { $("#resultados").innerHTML = `<p class="error">No se pudo buscar.</p>`; return; }
+    lista = data; pintar();
+  });
+  $("#textoBuscar").focus();
+}
+
+async function abrirMias() {
+  if (!usuario) {
+    abrirModal(`<div class="cabecera"><h2>Mis publicaciones</h2>${botonCerrar}</div>
+      <p class="sub">Iniciá sesión con Google para ver tus publicaciones.</p>
+      <button class="boton" data-accion="entrar">Iniciar sesión con Google</button>`);
+    return;
+  }
+  abrirModal(`<div class="cabecera"><h2>Mis publicaciones</h2>${botonCerrar}</div><div id="resultados"><p class="sub">Cargando…</p></div>`);
+  const { data, error } = await sb.from("reportes").select("*").eq("usuario_id", usuario.id).order("creado_en", { ascending: false });
+  if (error) { $("#resultados").innerHTML = `<p class="error">No se pudo cargar.</p>`; return; }
+  $("#resultados").innerHTML = data.length ? data.map(fila).join("") : `<p class="sub">Todavía no publicaste nada con esta cuenta.</p>`;
+  conectarFilas(data);
+}
+
+async function abrirEnCasa() {
+  abrirModal(`<div class="cabecera"><h2>Volvieron a casa</h2>${botonCerrar}</div><div id="resultados"><p class="sub">Cargando…</p></div>`);
+  const { data, count, error } = await sb.from("reportes").select("*", { count: "exact" })
+    .eq("estado", "en_casa").order("recuperado_en", { ascending: false, nullsFirst: false }).limit(100);
+  if (error) { $("#resultados").innerHTML = `<p class="error">No se pudo cargar.</p>`; return; }
+  const total = count ?? data.length;
+  $("#resultados").innerHTML = `<div class="contador"><b>${total}</b>${total === 1 ? "mascota volvió a casa" : "mascotas volvieron a casa"}<br><span style="font-size:14px">gracias a la ayuda de la comunidad</span></div>`
+    + (data.length ? data.map(fila).join("") : `<p class="sub" style="margin-top:16px">Todavía no hay finales felices. ¡Ojalá pronto!</p>`);
+  conectarFilas(data);
+}
+
+async function eliminarCuenta() {
+  if (!confirm("¿Eliminar tu cuenta? Se borran tu cuenta y todas tus publicaciones con sus fotos. No se puede deshacer.")) return;
+  try {
+    const { data, error } = await sb.from("reportes").select("*").eq("usuario_id", usuario.id);
+    if (error) throw error;
+    for (const r of data) await borrarReporte(r);
+    const { error: e2 } = await sb.rpc("eliminar_mi_cuenta");
+    if (e2) throw e2;
+    await sb.auth.signOut();
+    avisar("Tu cuenta fue eliminada");
+    cargar();
+  } catch (e) { avisar("Error: " + e.message); }
+}
+
+// ===================== Publicar =====================
+let mapaPunto = null;
+
+function elegirTipo() {
+  if (!usuario) {
+    abrirModal(`<div class="cabecera"><h2>Iniciá sesión para publicar</h2>${botonCerrar}</div>
+      <p class="sub">Usamos tu cuenta de Google para que puedas editar tus publicaciones desde la web y la app, y para evitar publicaciones falsas. Tu email no se muestra a nadie.</p>
+      <button class="boton" data-accion="entrar">Continuar con Google</button>`);
+    return;
+  }
+  abrirModal(`<div class="cabecera"><h2>¿Qué querés publicar?</h2>${botonCerrar}</div>
+    <button class="boton amarillo" data-tipo="calle">Vi uno en la calle</button>
+    <button class="boton rojo" data-tipo="buscada">Perdí a mi mascota</button>`);
+  $("#modal").querySelectorAll("[data-tipo]").forEach(b => b.addEventListener("click", () => abrirFormulario(b.dataset.tipo)));
+}
+
+async function prepararFoto(archivo) {
+  const url = URL.createObjectURL(archivo);
+  const img = await new Promise((ok, mal) => { const i = new Image(); i.onload = () => ok(i); i.onerror = mal; i.src = url; });
+  const escala = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.naturalWidth * escala);
+  c.height = Math.round(img.naturalHeight * escala);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(url);
+  let calidad = 0.8, blob;
+  do {
+    blob = await new Promise(ok => c.toBlob(ok, "image/jpeg", calidad));
+    calidad -= 0.1;
+  } while (blob.size > 300000 && calidad >= 0.4);
+  return blob;
+}
+
+async function localidadDe(lat, lng) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&accept-language=es&lat=${lat}&lon=${lng}`);
+    const j = await r.json();
+    const a = j.address || {};
+    return a.city || a.town || a.village || a.suburb || a.municipality || a.county || a.state || "";
+  } catch { return ""; }
+}
+
+function abrirFormulario(tipo) {
+  const buscada = tipo === "buscada";
+  const estado = { fotos: [], especie: null, tamano: null, punto: miPunto ? [...miPunto] : null, localidadEditada: false };
+
+  abrirModal(`
+    <div class="cabecera"><h2>${buscada ? "Perdí a mi mascota" : "Vi uno en la calle"}</h2>${botonCerrar}</div>
+    <label class="titulo">${buscada ? "Fotos (hasta 3) *" : "Fotos (hasta 3) *"}</label>
+    <div class="fotos" id="fotos"></div>
+    <label class="titulo">¿Qué es? *</label>
+    <div class="chips" id="especie"><button class="chip" data-v="perro">Perro</button><button class="chip" data-v="gato">Gato</button></div>
+    ${buscada ? `<label class="titulo" for="nombre">Nombre de tu mascota</label><input type="text" id="nombre" maxlength="40">` : ""}
+    <label class="titulo">Tamaño</label>
+    <div class="chips" id="tamano"><button class="chip" data-v="chico">Chico</button><button class="chip" data-v="mediano">Mediano</button><button class="chip" data-v="grande">Grande</button></div>
+    <label class="titulo" for="color">Color</label>
+    <input type="text" id="color" maxlength="60" placeholder="Ej: negro con manchas blancas">
+    <label class="titulo" for="descripcion">${buscada ? "Señas particulares" : "Detalles"}</label>
+    <textarea id="descripcion" maxlength="500" placeholder="${buscada ? "Collar, cicatrices, carácter…" : "Collar, si está herido, actitud…"}"></textarea>
+    <label class="titulo" for="contacto">Tu WhatsApp ${buscada ? "*" : "(opcional)"}</label>
+    <input type="tel" id="contacto" maxlength="30" placeholder="Ej: 11 2345 6789">
+    <p class="ayuda">Sin 0 ni 15. Se mostrará públicamente.</p>
+    <label class="titulo">${buscada ? "Último lugar donde la viste *" : "Dónde está *"}</label>
+    <p class="ayuda">Mové el mapa hasta que el alfiler quede en el lugar.${buscada ? " Se mostrará una zona aproximada (unos 300 m)." : ""}</p>
+    <div class="contenedor-punto">
+      <div id="mapaPunto"></div>
+      <svg class="alfiler" viewBox="0 0 24 24" aria-hidden="true"><path fill="#1F2937" d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+    </div>
+    <label class="titulo" for="localidad">Localidad *</label>
+    <input type="text" id="localidad" maxlength="80">
+    <p class="ayuda">Se completa sola. Corregila si hace falta.</p>
+    <div class="error" id="errorForm"></div>
+    <button class="boton" id="enviar" style="margin-top:16px" disabled>Publicar</button>
+    <p class="ayuda">* Campos obligatorios.</p>`);
+
+  const m = $("#modal");
+  const pintarFotos = () => {
+    $("#fotos").innerHTML = estado.fotos.map((f, i) => `<div class="foto-prev"><img src="${f.vista}" alt="Foto ${i + 1}"><button data-quitar="${i}" aria-label="Quitar">×</button></div>`).join("")
+      + (estado.fotos.length < 3 ? `<button class="agregar-foto" id="agregarFoto">+ Agregar<br>foto</button>` : "");
+    $("#agregarFoto")?.addEventListener("click", () => $("#elegirFoto").click());
+    m.querySelectorAll("[data-quitar]").forEach(b => b.addEventListener("click", () => { estado.fotos.splice(+b.dataset.quitar, 1); pintarFotos(); validar(); }));
+  };
+  $("#elegirFoto").onchange = async (e) => {
+    const archivo = e.target.files[0]; e.target.value = "";
+    if (!archivo) return;
+    try {
+      const blob = await prepararFoto(archivo);
+      estado.fotos.push({ blob, vista: URL.createObjectURL(blob) });
+      pintarFotos(); validar();
+    } catch { avisar("No se pudo usar esa foto"); }
+  };
+  pintarFotos();
+
+  const chips = (id, clave, permiteNada) => $(id).addEventListener("click", (e) => {
+    const b = e.target.closest("[data-v]"); if (!b) return;
+    estado[clave] = (permiteNada && estado[clave] === b.dataset.v) ? null : b.dataset.v;
+    $(id).querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.v === estado[clave]));
+    validar();
+  });
+  chips("#especie", "especie", false);
+  chips("#tamano", "tamano", true);
+
+  // Mapa para elegir el punto
+  const inicio = estado.punto || mapa.getCenter();
+  mapaPunto = L.map("mapaPunto", { zoomControl: true }).setView(inicio, estado.punto ? 17 : 13);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(mapaPunto);
+  setTimeout(() => mapaPunto && mapaPunto.invalidateSize(), 100);
+  let espera;
+  const actualizarPunto = () => {
+    const c = mapaPunto.getCenter();
+    estado.punto = [c.lat, c.lng];
+    validar();
+    clearTimeout(espera);
+    espera = setTimeout(async () => {
+      if (estado.localidadEditada) return;
+      const loc = await localidadDe(c.lat, c.lng);
+      if (loc && !estado.localidadEditada) { $("#localidad").value = loc; validar(); }
+    }, 900);
+  };
+  mapaPunto.on("moveend", actualizarPunto);
+  actualizarPunto();
+
+  $("#localidad").addEventListener("input", () => { estado.localidadEditada = true; validar(); });
+  m.querySelectorAll("input,textarea").forEach(x => x.addEventListener("input", validar));
+
+  function validar() {
+    const ok = estado.fotos.length > 0 && estado.especie && estado.punto &&
+      $("#localidad").value.trim() && (!buscada || $("#contacto").value.trim());
+    $("#enviar").disabled = !ok;
+  }
+
+  $("#enviar").addEventListener("click", async () => {
+    const boton = $("#enviar");
+    boton.disabled = true; boton.textContent = "Publicando…";
+    $("#errorForm").textContent = "";
+    try {
+      let [lat, lng] = estado.punto;
+      if (buscada) { lat = Math.round(lat / 0.003) * 0.003; lng = Math.round(lng / 0.003) * 0.003; }
+      const urls = [];
+      for (const f of estado.fotos) {
+        const ruta = `${usuario.id}/${crypto.randomUUID()}.jpg`;
+        const { error } = await sb.storage.from("fotos").upload(ruta, f.blob, { contentType: "image/jpeg" });
+        if (error) throw error;
+        urls.push(sb.storage.from("fotos").getPublicUrl(ruta).data.publicUrl);
+      }
+      const localidad = $("#localidad").value.trim();
+      const vacio = (v) => v.trim() || null;
+      const { error } = await sb.from("reportes").insert({
+        tipo, especie: estado.especie,
+        nombre: buscada ? vacio($("#nombre").value) : null,
+        tamano: estado.tamano,
+        color: vacio($("#color").value),
+        descripcion: vacio($("#descripcion").value),
+        contacto: vacio($("#contacto").value),
+        localidad, localidad_busqueda: normalizar(localidad),
+        lat, lng,
+        foto_url: urls[0], fotos_extra: urls.slice(1)
+      });
+      if (error) throw error;
+      avisar(buscada ? "Publicado. ¡Ojalá vuelva pronto!" : "¡Publicado! Gracias por ayudar.");
+      cerrarModal(); cargar();
+    } catch (e) {
+      $("#errorForm").textContent = "No se pudo publicar: " + (e.message || e);
+      boton.textContent = "Publicar"; validar();
+    }
+  });
+}
+
+// ===================== Botones =====================
+function ponerFiltro(f) {
+  filtro = f;
+  document.querySelectorAll(".filtro").forEach(b => b.classList.toggle("on", b.dataset.filtro === f));
+  dibujar();
+}
+document.querySelectorAll(".filtro").forEach(b => b.addEventListener("click", () => ponerFiltro(b.dataset.filtro)));
+
+const menu = $("#menu");
+$("#botonMenu").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const abierto = menu.classList.toggle("abierto");
+  $("#botonMenu").setAttribute("aria-expanded", abierto);
+});
+document.addEventListener("click", (e) => { if (!menu.contains(e.target)) menu.classList.remove("abierto"); });
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-accion]"); if (!b) return;
+  menu.classList.remove("abierto");
+  const a = b.dataset.accion;
+  if (a === "buscar") abrirBuscar();
+  else if (a === "mias") abrirMias();
+  else if (a === "encasa") abrirEnCasa();
+  else if (a === "entrar") entrar();
+  else if (a === "salir") sb.auth.signOut().then(() => avisar("Sesión cerrada"));
+  else if (a === "eliminarCuenta") eliminarCuenta();
+});
+
+$("#botonActualizar").addEventListener("click", () => { cargar(); avisar("Actualizado"); });
+$("#botonUbicacion").addEventListener("click", () => ubicarme(true));
+$("#botonPublicar").addEventListener("click", elegirTipo);
+
+cargar();
+ubicarme(true);
+</script>
 </body>
 </html>
