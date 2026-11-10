@@ -288,7 +288,7 @@ async function entrar() {
 }
 
 // ===================== Mapa =====================
-const mapa = L.map("mapa", { zoomControl: false }).setView([-34.6037, -58.3816], 12);
+const mapa = L.map("mapa", { zoomControl: false }).setView([-38.4, -63.6], 4); // Argentina completa
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -325,14 +325,47 @@ async function cargar() {
   dibujar();
 }
 
+let circuloPrecision = null;
+let seguimiento = null;
+
 function ubicarme(centrar = true) {
   if (!navigator.geolocation) { avisar("Tu navegador no permite ubicación"); return; }
-  navigator.geolocation.getCurrentPosition((p) => {
+  if (seguimiento !== null) navigator.geolocation.clearWatch(seguimiento);
+  let mejor = Infinity;
+  let primera = true;
+  avisar("Buscando tu ubicación…");
+
+  // Escucha la ubicación unos segundos y se queda con la más precisa
+  seguimiento = navigator.geolocation.watchPosition((p) => {
+    const precision = p.coords.accuracy; // en metros
+    if (precision >= mejor) return;
+    mejor = precision;
     miPunto = [p.coords.latitude, p.coords.longitude];
+
     if (marcaYo) marcaYo.remove();
+    if (circuloPrecision) circuloPrecision.remove();
     marcaYo = L.marker(miPunto, { icon: L.divIcon({ className: "", html: '<div class="yo"></div>', iconSize: [30, 30], iconAnchor: [15, 15] }), interactive: false }).addTo(mapa);
-    if (centrar) mapa.setView(miPunto, 16);
-  }, () => avisar("No pudimos obtener tu ubicación. Revisá el permiso del navegador."), { enableHighAccuracy: true, timeout: 10000 });
+    circuloPrecision = L.circle(miPunto, { radius: precision, color: "#4C8DF6", weight: 1, fillOpacity: 0.08, interactive: false }).addTo(mapa);
+
+    if (centrar) {
+      if (precision > 2000) mapa.fitBounds(circuloPrecision.getBounds());
+      else mapa.setView(miPunto, precision > 300 ? 15 : 17);
+    }
+    if (primera && precision > 2000) {
+      avisar(`Ubicación aproximada (±${Math.round(precision / 1000)} km). En una computadora es normal; en el celular activá el GPS.`);
+    }
+    primera = false;
+    if (precision <= 50) { navigator.geolocation.clearWatch(seguimiento); seguimiento = null; }
+  }, (e) => {
+    const motivo = e.code === 1 ? "No diste permiso de ubicación. Activalo en el candado de la barra de direcciones."
+      : e.code === 3 ? "Tardó demasiado en encontrar tu ubicación. Probá de nuevo."
+      : "No pudimos obtener tu ubicación.";
+    avisar(motivo);
+    if (seguimiento !== null) { navigator.geolocation.clearWatch(seguimiento); seguimiento = null; }
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+
+  // Deja de escuchar a los 20 segundos para no gastar batería
+  setTimeout(() => { if (seguimiento !== null) { navigator.geolocation.clearWatch(seguimiento); seguimiento = null; } }, 20000);
 }
 
 // ===================== Ventanas =====================
@@ -630,7 +663,7 @@ function abrirFormulario(tipo) {
 
   // Mapa para elegir el punto
   const inicio = estado.punto || mapa.getCenter();
-  mapaPunto = L.map("mapaPunto", { zoomControl: true }).setView(inicio, estado.punto ? 17 : 13);
+  mapaPunto = L.map("mapaPunto", { zoomControl: true }).setView(inicio, estado.punto ? 17 : Math.max(mapa.getZoom(), 5));
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(mapaPunto);
   setTimeout(() => mapaPunto && mapaPunto.invalidateSize(), 100);
   let espera;
