@@ -177,7 +177,9 @@ textarea{min-height:84px;resize:vertical}
 // ===================== Configuración =====================
 const SUPA_URL = "https://dbkvnxpgcoxocsvlmsij.supabase.co";
 const SUPA_KEY = "sb_publishable_vu0XnZRXf7jfEWWCTF_rxQ_EEcfQo5I";
-const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY, {
+  auth: { flowType: "implicit", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
+});
 const FOTOS_OK = SUPA_URL + "/storage/v1/object/public/fotos/";
 
 const MOTIVOS = [
@@ -241,8 +243,30 @@ const fotosDe = (r) => [r.foto_url, ...(r.fotos_extra || [])].map(fotoSegura).fi
 
 // ===================== Sesión =====================
 let usuario = null;
-sb.auth.getSession().then(({ data }) => { usuario = data.session?.user ?? null; pintarSesion(); });
-sb.auth.onAuthStateChange((_e, sesion) => { usuario = sesion?.user ?? null; pintarSesion(); });
+
+// Si Google o Supabase devolvieron un error, mostrarlo
+(function errorDeSesion() {
+  const datos = new URLSearchParams(window.location.search + "&" + window.location.hash.replace(/^#/, ""));
+  const err = datos.get("error_description") || datos.get("error");
+  if (err) {
+    setTimeout(() => avisar("Error al iniciar sesión: " + err), 300);
+    history.replaceState(null, "", window.location.pathname);
+  }
+})();
+
+sb.auth.getSession().then(({ data, error }) => {
+  if (error) avisar("Error de sesión: " + error.message);
+  usuario = data.session?.user ?? null;
+  pintarSesion();
+});
+sb.auth.onAuthStateChange((evento, sesion) => {
+  usuario = sesion?.user ?? null;
+  pintarSesion();
+  if (evento === "SIGNED_IN" && usuario) {
+    avisar("Sesión iniciada como " + (usuario.email || "usuario"));
+    if (window.location.hash.includes("access_token")) history.replaceState(null, "", window.location.pathname);
+  }
+});
 
 function pintarSesion() {
   const m = $("#menuSesion");
